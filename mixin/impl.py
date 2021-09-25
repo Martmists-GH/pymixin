@@ -1,6 +1,7 @@
 import secrets
 from dis import dis
 from inspect import signature
+from itertools import product
 from types import CodeType, LambdaType, FunctionType
 from typing import Any, List, Callable, Union, Optional, Tuple
 from mixin.annotate import MixinType, Overwrite, ModifyConst, Inject, AtValue, At, Redirect, ModifyVar
@@ -9,6 +10,7 @@ from asm import LOAD_CONST, CALL_FUNCTION, DUP_TOP, POP_TOP, LOAD_ATTR, POP_JUMP
 from mixin.callback import CallbackInfo
 
 OpList = List[Union[Opcode, Label]]
+# TODO: Replace pattern matching with 3.5-compatible alternative
 
 
 def check_mixins(func: Callable, mixins: List[MixinType]):
@@ -34,7 +36,13 @@ def check_mixins(func: Callable, mixins: List[MixinType]):
             else:
                 return False
 
-    # TODO: Redirecting same call with same prio = fail
+    # Redirecting same call with same prio = fail
+    for m1, m2 in product(mixins, mixins):
+        if m1 is m2:
+            continue
+        if m1.target == m2.target and m1.priority == m2.priority:
+            # TODO: compare string target with func target
+            return False
 
     return True
 
@@ -99,14 +107,16 @@ def apply_inject(code: CodeType, ops: OpList, callback: Callable, at: At, cancel
             LOAD_CONST(callback),
             *args,
             LOAD_FAST(name),
-            ROT_TWO(),
             CALL_FUNCTION(1 + len(args)),
             POP_TOP(),
-            LOAD_ATTR("cancelled"),
+            LOAD_FAST(name),
+            DUP_TOP(),
+            LOAD_ATTR("_cancelled"),
             POP_JUMP_IF_FALSE(end_label),
             LOAD_ATTR("return_value"),
-            RETURN_VALUE,
+            RETURN_VALUE(),
             end_label,
+            POP_TOP(),
         ]
     else:
         injected = [
@@ -134,7 +144,8 @@ def apply_overwrite(code: CodeType, ops: OpList, callback: Callable):
     ops[:] = [
         LOAD_CONST(callback),
         *args,
-        CALL_FUNCTION(len(args))
+        CALL_FUNCTION(len(args)),
+        RETURN_VALUE(),
     ]
 
 
@@ -220,4 +231,3 @@ def apply_mixins(func: Callable, mixins: List[MixinType]):
 
     serializer = Serializer(ops, code_obj)
     func.__code__ = serializer.serialize()
-    dis(func)

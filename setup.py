@@ -7,7 +7,7 @@ setup(
     author_email="martmists@gmail.com",
     description="A high-level library for manipulating Python Bytecode in an easy way.",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Programming Language :: Python :: 3",
         "Topic :: Software Development :: Libraries :: Application Frameworks",
         "Topic :: Software Development :: Code Generators",
@@ -15,5 +15,5 @@ setup(
     ],
     packages=["mixin"],
     requires=["pyasm"],
-    python_requires=">=3.6",
+    python_requires=">=3.10",
 )

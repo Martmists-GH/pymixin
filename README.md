@@ -80,7 +80,7 @@ World
 >>> 
 ```
 
-### (WIP) Modify returned value
+### Modify returned value
 
 ```python
 >>> from mixin import *

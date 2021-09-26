@@ -10,7 +10,6 @@ from asm import LOAD_CONST, CALL_FUNCTION, DUP_TOP, POP_TOP, LOAD_ATTR, POP_JUMP
 from mixin.callback import CallbackInfo
 
 OpList = List[Union[Opcode, Label]]
-# TODO: Replace pattern matching with 3.5-compatible alternative
 
 
 def check_mixins(func: Callable, mixins: List[MixinType]):
@@ -40,8 +39,12 @@ def check_mixins(func: Callable, mixins: List[MixinType]):
     for m1, m2 in product(mixins, mixins):
         if m1 is m2:
             continue
+
+        if isinstance(m1, str) or isinstance(m2, str):
+            m1 = m1.__name__ if hasattr(m1, "__name__") else m1
+            m2 = m2.__name__ if hasattr(m2, "__name__") else m2
+
         if m1.target == m2.target and m1.priority == m2.priority:
-            # TODO: compare string target with func target
             return False
 
     return True
@@ -82,6 +85,7 @@ def replace_op(ops: OpList, index: int, target: OpList):
 def apply_inject(code: CodeType, ops: OpList, callback: Callable, at: At, cancellable: bool):
     args = load_locals(code, callback, True)
     name = "__mixin_" + secrets.token_hex(32)
+    did_inject = False
 
     if at.value is AtValue.RETURN:
         mark1 = [
@@ -117,6 +121,7 @@ def apply_inject(code: CodeType, ops: OpList, callback: Callable, at: At, cancel
             RETURN_VALUE(),
             end_label,
             POP_TOP(),
+            *mark2,
         ]
     else:
         injected = [
@@ -129,14 +134,24 @@ def apply_inject(code: CodeType, ops: OpList, callback: Callable, at: At, cancel
             CALL_FUNCTION(nargs),
             CALL_FUNCTION(1 + len(args)),
             POP_TOP(),
+            *mark2,
         ]
 
-    match at.value:
-        # At head
-        case AtValue.HEAD:
-            ops[:] = injected + ops
-        case _:
-            raise NotImplementedError(at.value)
+    if at.value is AtValue.HEAD:
+        did_inject = True
+        ops[:] = injected + ops
+    elif at.value is AtValue.RETURN:
+        returns = get_targets(ops, RETURN_VALUE, at.index, at.target)
+        while returns:
+            did_inject = True
+            ret = returns.pop(0)
+            i = ops.index(ret)
+            replace_op(ops, i, injected)
+    else:
+        raise NotImplementedError(at.value)
+
+    if not did_inject:
+        raise ValueError("Unable to inject mixin at {0} with callback {1}".format(at, callback))
 
 
 def apply_overwrite(code: CodeType, ops: OpList, callback: Callable):
@@ -152,48 +167,59 @@ def apply_overwrite(code: CodeType, ops: OpList, callback: Callable):
 def apply_modifyconst(code: CodeType, ops: OpList, callback: Callable, at: At):
     # At load
     targets = get_targets(ops, LOAD_CONST, at.index, at.target)
+    did_inject = False
 
     args = load_locals(code, callback, False)
-    index = 0
 
-    for op in ops[:]:
-        if op in targets:
-            replace_op(ops, index, [
-                LOAD_CONST(callback),
-                *args,
-                CALL_FUNCTION(len(args))
-            ])
-            index += 1 + len(args)
-        index += 1
+    while targets:
+        did_inject = True
+        ret = targets.pop(0)
+        i = ops.index(ret)
+        replace_op(ops, i, [
+            LOAD_CONST(callback),
+            *args,
+            CALL_FUNCTION(len(args))
+        ])
+
+    if not did_inject:
+        raise ValueError("Unable to inject mixin at {0} with callback {1}".format(at, callback))
 
 
 def apply_modifyvar(code: CodeType, ops: OpList, callback: Callable, at: At):
     # At load
     targets = get_targets(ops, (LOAD_FAST, LOAD_DEREF), at.index, at.target)
+    did_inject = False
 
     args = load_locals(code, callback, False)
-    index = 0
 
-    for op in ops[:]:
-        if op in targets:
-            replace_op(ops, index, [
-                LOAD_CONST(callback),
-                *args,
-                CALL_FUNCTION(len(args))
-            ])
-            index += 1 + len(args)
-        index += 1
+    while targets:
+        did_inject = True
+        ret = targets.pop(0)
+        i = ops.index(ret)
+        replace_op(ops, i, [
+            LOAD_CONST(callback),
+            *args,
+            CALL_FUNCTION(len(args))
+        ])
+
+    if not did_inject:
+        raise ValueError("Unable to inject mixin at {0} with callback {1}".format(at, callback))
 
 
 def apply_redirect(code: CodeType, ops: OpList, callback: Callable, at: At):
     # At invoke
     targets = get_targets(ops, (LOAD_GLOBAL, LOAD_FAST, LOAD_DEREF), at.index, at.target)
-    # TODO: LOAD_ATTR with parent/attr name
-    index = 0
-    for op in ops[:]:
-        if op in targets:
-            ops[index] = LOAD_CONST(callback)
-        index += 1
+    did_inject = False
+    while targets:
+        did_inject = True
+        ret = targets.pop(0)
+        i = ops.index(ret)
+        replace_op(ops, i, [
+            LOAD_CONST(callback)
+        ])
+
+    if not did_inject:
+        raise ValueError("Unable to inject mixin at {0} with callback {1}".format(at, callback))
 
 
 def apply_mixins(func: Callable, mixins: List[MixinType]):
@@ -213,21 +239,19 @@ def apply_mixins(func: Callable, mixins: List[MixinType]):
     )
 
     for m in sorted(mixins, key=lambda t: t.priority):
-        match m:
-            case Overwrite(callback):
-                # Only one overwrite
-                apply_overwrite(code_obj, ops, callback)
-            case ModifyConst(callback, at):
-                apply_modifyconst(code_obj, ops, callback, at)
-            case ModifyVar(callback, at):
-                apply_modifyvar(code_obj, ops, callback, at)
-            case Redirect(callback, at):
-                apply_redirect(code_obj, ops, callback, at)
-            case Inject(callback, at, cancellable):
-                apply_inject(code_obj, ops, callback, at, cancellable)
-            case _:
-                # Error
-                raise NotImplementedError(m)
+        if isinstance(m, Overwrite):
+            apply_overwrite(code_obj, ops, m.callback)
+        elif isinstance(m, ModifyConst):
+            apply_modifyconst(code_obj, ops, m.callback, m.at)
+        elif isinstance(m, ModifyVar):
+            apply_modifyvar(code_obj, ops, m.callback, m.at)
+        elif isinstance(m, Redirect):
+            apply_redirect(code_obj, ops, m.callback, m.at)
+        elif isinstance(m, Inject):
+            apply_inject(code_obj, ops, m.callback, m.at, m.cancellable)
+        else:
+            # Error
+            raise NotImplementedError(m)
 
     serializer = Serializer(ops, code_obj)
     func.__code__ = serializer.serialize()

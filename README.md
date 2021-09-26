@@ -114,6 +114,37 @@ World
 b
 ```
 
+### A note on decorators
+
+Often in python, a function is wrapped with a decorator. This means the value of a function is no longer the same.
+To resolve this, we added `mixin.unwrap`, to get the original function back (assuming `functools.wraps`) was used.
+
+```python
+>>> from mixin import *
+>>> from functools import wraps
+>>> 
+>>> def with_print(func):
+...     @wraps(func)
+...     def inner(*args, **kwargs):
+...         print("args", args, kwargs)
+...         return func(*args, **kwargs)
+...     return inner
+... 
+>>> @with_print
+... def test(n):
+...     return n*2
+... 
+>>> @inject(method=unwrap(test), at=At(value=AtValue.HEAD))
+... def log_n(n, callback_info):
+...     print("N:", n)
+... 
+>>> test(10)
+args (10,) {}
+N: 10
+20
+
+```
+
 ## Installing
 
 To install PyMixin, you can just use pip:

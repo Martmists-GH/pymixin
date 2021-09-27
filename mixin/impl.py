@@ -1,12 +1,12 @@
 import secrets
-from dis import dis
 from inspect import signature
 from itertools import product
 from types import CodeType, LambdaType, FunctionType
-from typing import Any, List, Callable, Union, Optional, Tuple
-from mixin.annotate import MixinType, Overwrite, ModifyConst, Inject, AtValue, At, Redirect, ModifyVar
+from typing import Any, List, Callable, Union, Tuple
+
 from asm import LOAD_CONST, CALL_FUNCTION, DUP_TOP, POP_TOP, LOAD_ATTR, POP_JUMP_IF_FALSE, \
-    RETURN_VALUE, ROT_TWO, Deserializer, Serializer, LOAD_FAST, Label, Opcode, STORE_FAST, NOP, LOAD_GLOBAL, LOAD_DEREF
+    RETURN_VALUE, Deserializer, Serializer, LOAD_FAST, Label, Opcode, STORE_FAST, LOAD_GLOBAL, LOAD_DEREF
+from mixin.annotate import MixinType, Overwrite, ModifyConst, Inject, AtValue, At, Redirect, ModifyVar
 from mixin.callback import CallbackInfo
 
 OpList = List[Union[Opcode, Label]]
@@ -26,7 +26,8 @@ def check_mixins(func: Callable, mixins: List[MixinType]):
         return False
 
     # Modifying same constant = fail
-    all_targets = [get_targets(ops, LOAD_CONST, it.at.index, it.at.target) for it in mixins if isinstance(it, ModifyConst)]
+    all_targets = [get_targets(ops, LOAD_CONST, it.at.index, it.at.target) for it in mixins if
+                   isinstance(it, ModifyConst)]
     known = set()
     for it in all_targets:
         for el in it:
@@ -50,18 +51,20 @@ def check_mixins(func: Callable, mixins: List[MixinType]):
     return True
 
 
-def get_targets(ops: OpList, type_: Union[type, Tuple[type, ...]], index: Union[int, slice], target: Any) -> List[Opcode]:
+def get_targets(ops: OpList, type_: Union[type, Tuple[type, ...]], index: Union[int, slice], target: Any) -> List[
+    Opcode]:
     targets = [
         op for op in ops if isinstance(op, type_) and (
                 target is None or
                 target == op.arg or (
-                    hasattr(target, "__name__") and target.__name__ == op.arg
+                        hasattr(target, "__name__") and target.__name__ == op.arg
                 )
         )
 
-        # Prevent it from finding injected ops; These are never consts in python itself
-        # Maybe figure out a better way to do this?
-        and not (isinstance(op, LOAD_CONST) and isinstance(op.arg, (type, FunctionType, LambdaType)))
+                            # Prevent it from finding injected ops; These are never consts in python itself
+                            # Maybe figure out a better way to do this?
+                            and not (
+                    isinstance(op, LOAD_CONST) and isinstance(op.arg, (type, FunctionType, LambdaType)))
     ]
 
     targets = targets[index or slice(0, len(targets))]
@@ -79,7 +82,7 @@ def load_locals(code: CodeType, func: Callable, ignore_last: bool) -> List[Opcod
 
 
 def replace_op(ops: OpList, index: int, target: OpList):
-    ops[index:index+1] = target
+    ops[index:index + 1] = target
 
 
 def apply_inject(code: CodeType, ops: OpList, callback: Callable, at: At, cancellable: bool):

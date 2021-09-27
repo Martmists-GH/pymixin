@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from types import LambdaType, FunctionType
-from typing import Any, Callable, Optional, List, Union
+from typing import Callable, Optional, List, Union
 
 from asm import Deserializer, LOAD_CONST, CALL_FUNCTION, POP_TOP, Serializer, RETURN_VALUE, LOAD_FAST
 
@@ -121,16 +121,16 @@ def get_wrapper(func: Callable) -> Callable:
     deserializer = Deserializer(func.__code__)
     ops = deserializer.deserialize()
     ops = [
-        # Change bytecode
-        LOAD_CONST(inject),
-        CALL_FUNCTION(),
-        POP_TOP(),
-        # Call self
-        LOAD_CONST(func),
-        *[LOAD_FAST(func.__code__.co_varnames[i]) for i in range(func.__code__.co_argcount)],
-        CALL_FUNCTION(func.__code__.co_argcount),
-        RETURN_VALUE(),
-    ] + ops
+              # Change bytecode
+              LOAD_CONST(inject),
+              CALL_FUNCTION(),
+              POP_TOP(),
+              # Call self
+              LOAD_CONST(func),
+              *[LOAD_FAST(func.__code__.co_varnames[i]) for i in range(func.__code__.co_argcount)],
+              CALL_FUNCTION(func.__code__.co_argcount),
+              RETURN_VALUE(),
+          ] + ops
     serializer = Serializer(ops, func.__code__)
     func.__code__ = serializer.serialize()
 

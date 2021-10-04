@@ -5,7 +5,7 @@ from types import CodeType, LambdaType, FunctionType
 from typing import Any, List, Callable, Union, Tuple
 
 from asm import LOAD_CONST, CALL_FUNCTION, DUP_TOP, POP_TOP, LOAD_ATTR, POP_JUMP_IF_FALSE, \
-    RETURN_VALUE, Deserializer, Serializer, LOAD_FAST, Label, Opcode, STORE_FAST, LOAD_GLOBAL, LOAD_DEREF
+    RETURN_VALUE, Deserializer, Serializer, LOAD_FAST, Label, Opcode, STORE_FAST, LOAD_GLOBAL, LOAD_DEREF, code_replace
 from mixin.annotate import MixinType, Overwrite, ModifyConst, Inject, AtValue, At, Redirect, ModifyVar
 from mixin.callback import CallbackInfo
 
@@ -14,7 +14,8 @@ OpList = List[Union[Opcode, Label]]
 
 def check_mixins(func: Callable, mixins: List[MixinType]):
     injected = 6 + func.__code__.co_argcount
-    code_obj = func.__code__.replace(
+    code_obj = code_replace(
+        func.__code__,
         co_code=func.__code__.co_code,
         co_consts=func.__code__.co_consts
     )
@@ -228,14 +229,16 @@ def apply_redirect(code: CodeType, ops: OpList, callback: Callable, at: At):
 def apply_mixins(func: Callable, mixins: List[MixinType]):
     # Restore original
     injected = 6 + func.__code__.co_argcount
-    code_obj = func.__code__.replace(
+    code_obj = code_replace(
+        func.__code__,
         co_code=func.__code__.co_code,
         co_consts=func.__code__.co_consts
     )
 
     deserializer = Deserializer(code_obj)
     ops = deserializer.deserialize()[injected:]
-    code_obj = code_obj.replace(
+    code_obj = code_replace(
+        code_obj,
         co_consts=tuple(),
         co_names=tuple(),
         co_varnames=code_obj.co_varnames[:code_obj.co_argcount],

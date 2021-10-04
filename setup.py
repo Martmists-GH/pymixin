@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="pymixin",
-    version="1.0.0",
+    version="1.1.0",
     author="Martmists",
     author_email="martmists@gmail.com",
     description="A high-level library for manipulating Python Bytecode in an easy way.",

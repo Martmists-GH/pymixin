@@ -236,7 +236,7 @@ def apply_mixins(func: Callable, mixins: List[MixinType]):
     deserializer = Deserializer(code_obj)
     ops = deserializer.deserialize()[injected:]
     code_obj = code_obj.replace(
-        co_consts=(None,),
+        co_consts=tuple(),
         co_names=tuple(),
         co_varnames=code_obj.co_varnames[:code_obj.co_argcount],
     )
